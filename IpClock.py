@@ -81,10 +81,6 @@ class IPClock:
             else:
                 self.log(f"❌ IP {device_ip} tidak cocok segmen, periksa jaringan!")
 
-    # def sync_time(self, device_ip):
-    #     """Simulasi proses sinkronisasi waktu ke device."""
-    #     # Nanti bagian ini bisa diisi komunikasi socket/HTTP ke device sebenarnya
-    #     self.log(f"Sync waktu ke device {device_ip}...")
     def sync_time(self, device_ip):
         """Kirim waktu ke device via socket TCP port 12345 (contoh)."""
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
