@@ -43,7 +43,18 @@ class IPClock:
         self.clock_label.pack(pady=20)
 
         # Hardcode IP Device
-        self.device_ip = ["192.168.2.50", "192.168.2.51"]
+        # self.device_ip = ["192.168.2.50", "192.168.2.51"]
+
+        # Ip Device Lewat Input
+        self.ip_entry = tk.Entry(root, font=("Arial", 14), width=30)
+        self.ip_entry.pack(pady=5)
+
+        self.set_ip_btn = tk.Button(
+            root, text="Set Device IP(s)", command=self.set_device_ips, bg="gray", fg="white"
+        )
+        self.set_ip_btn.pack(pady=2)
+
+        self.device_ip = []
 
         # Tombol check
         self.check_btn = tk.Button(
@@ -57,6 +68,12 @@ class IPClock:
 
         # Mulai update clock
         self.update_clock()
+    def set_device_ips(self):
+        """Ambil IP dari entry, pisahkan dengan koma, dan simpan ke self.device_ip."""
+        ip_text = self.ip_entry.get()
+        self.device_ip = [ip.strip() for ip in ip_text.split(",") if ip.strip()]
+        self.log(f"Daftar IP device di-set: {self.device_ip}")
+
 
     def log(self, message):
         """Tulis pesan ke log area."""
