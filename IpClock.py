@@ -53,7 +53,7 @@ class NPClockSync:
     def __init__(self, root):
         self.root = root
         self.root.title("NP301 Clock Sync - By Puterako")
-        self.root.geometry("600x400")
+        self.root.geometry("600x450")
         self.root.configure(bg="black")
 
         # Label jam digital
@@ -87,32 +87,29 @@ class NPClockSync:
         self.test_btn.pack(side=tk.LEFT, padx=5)
         
         self.realtime_sync_btn = tk.Button(
-            button_frame, text="Realtime Sync", command=self.toggle_realtime_sync,
+            button_frame, text="Live Custom Sync", command=self.toggle_realtime_sync,
             bg="red", fg="white", width=15
         )
         self.realtime_sync_btn.pack(side=tk.LEFT, padx=5)
-
 
         # Status dan format
         status_frame = tk.Frame(root, bg="black")
         status_frame.pack(pady=5)
         
-        tk.Label(status_frame, text="Time Format:", font=("Arial", 10), fg="white", bg="black").pack(side=tk.LEFT)
-        self.format_var = tk.StringVar(value="HH:MM")
-        format_options = ["HH:MM", "HH:MM:SS", "HH:MM\\r\\n", "HH:MM:SS\\r\\n", "Custom"]
-        self.format_combo = tk.OptionMenu(status_frame, self.format_var, *format_options)
-        self.format_combo.config(bg="gray", fg="white")
-        # Add custom format entry
-        self.custom_entry = tk.Entry(status_frame, font=("Arial", 10), width=20, bg="gray", fg="white")
-        self.custom_entry.pack(side=tk.LEFT, padx=5)
+        tk.Label(status_frame, text="Format: HHMM + CR LF", font=("Arial", 12), fg="lime", bg="black").pack(side=tk.LEFT)
+        
+        # Format entry (fixed format)
+        self.custom_entry = tk.Entry(status_frame, font=("Arial", 10), width=15, bg="gray", fg="white")
+        self.custom_entry.pack(side=tk.LEFT, padx=10)
         self.custom_entry.insert(0, "%H%M\r\n")  # Format HHMM dengan CR LF
+        self.custom_entry.config(state="readonly")  # Make it readonly so user can't change
         
         # Debug frame
         debug_frame = tk.Frame(root, bg="black")
         debug_frame.pack(pady=5)
         
         self.send_custom_btn = tk.Button(
-            debug_frame, text="Send Custom", command=self.send_custom, 
+            debug_frame, text="Send Once", command=self.send_custom, 
             bg="purple", fg="white", width=12
         )
         self.send_custom_btn.pack(side=tk.LEFT, padx=5)
@@ -138,6 +135,7 @@ class NPClockSync:
         self.log("=== NP301 Serial Device Server Clock Sync ===")
         self.log("PENTING: NP301 harus terhubung ke device clock/display di serial port")
         self.log("Program ini mengirim waktu ke NP301, lalu NP301 teruskan ke serial device")
+        self.log("Gunakan 'Live Custom Sync' untuk mengirim format HHMM + CRLF secara live")
 
     def log(self, message):
         """Tulis pesan ke log area."""
@@ -147,144 +145,123 @@ class NPClockSync:
         self.root.update_idletasks()
         
     def toggle_realtime_sync(self):
-        """Toggle realtime sync tiap detik."""
+        """Toggle realtime sync tiap detik dengan format custom."""
         if not self.auto_sync_active:
             self.auto_sync_active = True
-            self.realtime_sync_btn.config(text="Stop Realtime", bg="gray")
+            self.realtime_sync_btn.config(text="Stop Live Sync", bg="gray")
             self.auto_sync_thread = threading.Thread(target=self.realtime_sync_worker, daemon=True)
             self.auto_sync_thread.start()
-            self.log("Realtime sync started - kirim waktu tiap detik")
+            
+            # Log format yang akan digunakan
+            current_format = self.get_current_format_string()
+            self.log(f"Live Custom Sync started - format: {repr(current_format)}")
         else:
             self.auto_sync_active = False
-            self.realtime_sync_btn.config(text="Realtime Sync", bg="red")
-            self.log("Realtime sync stopped")
+            self.realtime_sync_btn.config(text="Live Custom Sync", bg="red")
+            self.log("Live Custom Sync stopped")
 
-    def realtime_sync_worker(self):
-        """Worker untuk realtime sync tiap detik."""
-        while self.auto_sync_active:
-            now = self.get_ntp_time()
+    def get_current_format_string(self):
+        """Dapatkan format string yang sedang aktif (fixed format)."""
+        return self.custom_entry.get()
 
-            # Ambil format (support custom juga)
-            if self.format_var.get() == "Custom":
-                formatted_data = now.strftime(self.custom_entry.get())
-            else:
-                formatted_data = self.format_time(now)
-
-            # Handle escape sequence (CR LF, hex, dll)
-            if '\\r\\n' in formatted_data:
-                formatted_data = formatted_data.replace('\\r\\n', '\r\n')
+    def process_format_string(self, format_str, dt):
+        """Proses format string dan konversi escape sequences."""
+        # First apply datetime formatting
+        formatted_data = dt.strftime(format_str)
+        
+        # Handle escape sequences - convert \r\n to actual CR LF
+        if '\\r\\n' in formatted_data:
+            formatted_data = formatted_data.replace('\\r\\n', '\r\n')
+        elif '\r\n' not in formatted_data and ('\\r' in formatted_data or '\\n' in formatted_data):
             if '\\r' in formatted_data:
                 formatted_data = formatted_data.replace('\\r', '\r')
             if '\\n' in formatted_data:
                 formatted_data = formatted_data.replace('\\n', '\n')
+        
+        return formatted_data
 
-            import re
-            def replace_hex(match):
-                hex_str = match.group(1)
-                return bytes.fromhex(hex_str).decode('latin1')
-            formatted_data = re.sub(r'\\x([0-9a-fA-F]{2})', replace_hex, formatted_data)
-
+    def realtime_sync_worker(self):
+        """Worker untuk realtime sync tiap detik dengan format yang dipilih."""
+        last_sent_data = ""
+        last_minute = -1
+        
+        while self.auto_sync_active:
             try:
-                ip = self.ip_entry.get().strip()
-                port = int(self.port_entry.get().strip())
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.settimeout(5)
-                    s.connect((ip, port))
-                    data_bytes = formatted_data.encode('latin1')
-                    s.send(data_bytes)
+                now = self.get_ntp_time()
+                
+                # Ambil format yang sedang aktif
+                current_format = self.get_current_format_string()
+                formatted_data = self.process_format_string(current_format, now)
+                
+                # Kirim data setiap menit (saat menit berubah)
+                current_minute = now.minute
+                if current_minute != last_minute or formatted_data != last_sent_data:
+                    ip = self.ip_entry.get().strip()
+                    port = int(self.port_entry.get().strip())
+                    
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.settimeout(5)
+                        s.connect((ip, port))
+                        data_bytes = formatted_data.encode('latin1')
+                        s.send(data_bytes)
+                        
+                        # Log setiap kali kirim data
+                        self.log(f"Live sync: {repr(formatted_data)} -> {binascii.hexlify(data_bytes).decode('ascii')}")
+                    
+                    last_sent_data = formatted_data
+                    last_minute = current_minute
+                    
             except Exception as e:
-                self.log(f"Realtime sync error: {e}")
-
+                self.log(f"Live sync error: {e}")
+                # Jangan berhenti, coba lagi
+                
             time.sleep(1)
 
-
     def update_clock(self):
+        """Update tampilan jam digital di interface."""
         now = datetime.datetime.now().strftime("%H:%M:%S")
         self.clock_label.config(text=now)
         self.root.after(1000, self.update_clock)
 
     def get_ntp_time(self):
+        """Ambil waktu dari NTP server, fallback ke waktu lokal."""
         try:
             client = ntplib.NTPClient()
             response = client.request('id.pool.ntp.org', timeout=5)
             ntp_time = datetime.datetime.fromtimestamp(response.tx_time)
             return ntp_time
         except Exception as e:
-            self.log(f"Gagal ambil NTP time: {e}, gunakan waktu lokal")
+            # Hanya log error pertama kali, tidak spam log
+            if not hasattr(self, '_ntp_error_logged'):
+                self.log(f"NTP unavailable: {e}, using local time")
+                self._ntp_error_logged = True
             return datetime.datetime.now()
 
     def format_time(self, dt):
-        format_str = self.format_var.get()
-        
-        if format_str == "HH:MM":
-            return dt.strftime("%H:%M")
-        elif format_str == "HH:MM:SS":
-            return dt.strftime("%H:%M:%S")
-        elif format_str == "HH:MM\\r\\n":
-            return dt.strftime("%H:%M") + "\r\n"
-        elif format_str == "HH:MM:SS\\r\\n":
-            return dt.strftime("%H:%M:%S") + "\r\n"
-        elif format_str == "Custom":
-            custom_format = self.custom_entry.get()
-            return dt.strftime(custom_format)  # ini tetap support leading zero
-        else:
-            return dt.strftime("%H:%M")
-
-        """Format waktu sesuai pilihan."""
-        format_str = self.format_var.get()
-        
-        if format_str == "HH:MM":
-            return dt.strftime("%H:%M")
-        elif format_str == "HH:MM:SS":
-            return dt.strftime("%H:%M:%S")
-        elif format_str == "HH:MM\\r\\n":
-            return dt.strftime("%H:%M") + "\r\n"
-        elif format_str == "HH:MM:SS\\r\\n":
-            return dt.strftime("%H:%M:%S") + "\r\n"
-        elif format_str == "Custom":
-            # Use custom format with time placeholders
-            custom_format = self.custom_entry.get()
-            return dt.strftime(custom_format)
-        else:
-            return dt.strftime("%H:%M")
+        """Format waktu dengan format fixed HHMM + CRLF."""
+        return self.process_format_string(self.custom_entry.get(), dt)
 
     def send_custom(self):
-        """Kirim custom command ke NP301."""
+        """Kirim custom command ke NP301 sekali."""
         try:
             ip = self.ip_entry.get().strip()
             port = int(self.port_entry.get().strip())
-            custom_format = self.custom_entry.get()
             
             # Get time
             now = self.get_ntp_time()
             
-            # Handle special escape sequences properly
-            formatted_data = now.strftime(custom_format)
-            
-            # Convert escape sequences to actual bytes
-            if '\\r\\n' in formatted_data:
-                formatted_data = formatted_data.replace('\\r\\n', '\r\n')
-            if '\\r' in formatted_data:
-                formatted_data = formatted_data.replace('\\r', '\r')
-            if '\\n' in formatted_data:
-                formatted_data = formatted_data.replace('\\n', '\n')
-            
-            # Handle hex sequences like \x02, \x03
-            import re
-            def replace_hex(match):
-                hex_str = match.group(1)
-                return bytes.fromhex(hex_str).decode('latin1')
-            
-            formatted_data = re.sub(r'\\x([0-9a-fA-F]{2})', replace_hex, formatted_data)
+            # Use current format
+            current_format = self.get_current_format_string()
+            formatted_data = self.process_format_string(current_format, now)
             
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(5)
                 s.connect((ip, port))
                 
-                data_bytes = formatted_data.encode('latin1')  # Use latin1 to preserve bytes
+                data_bytes = formatted_data.encode('latin1')
                 s.send(data_bytes)
                 
-                self.log(f"Custom command sent: {repr(formatted_data)}")
+                self.log(f"Single send: {repr(formatted_data)}")
                 self.log(f"Hex: {binascii.hexlify(data_bytes).decode('ascii')}")
                 self.log(f"Raw bytes: {data_bytes}")
                 
@@ -300,14 +277,14 @@ class NPClockSync:
             def monitor_worker():
                 try:
                     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                        s.settimeout(30)  # 30 second timeout
+                        s.settimeout(30)
                         s.connect((ip, port))
                         
                         self.log("Monitoring NP301 for serial data...")
                         self.log("Jika ada device serial yang kirim data, akan terlihat di sini")
                         
                         start_time = time.time()
-                        while time.time() - start_time < 30:  # Monitor for 30 seconds
+                        while time.time() - start_time < 30:
                             try:
                                 s.settimeout(1)
                                 data = s.recv(1024)
@@ -343,10 +320,14 @@ class NPClockSync:
                 s.settimeout(5)
                 s.connect((ip, port))
                 
-                # Send test data
-                test_data = "TEST\r\n"
-                s.send(test_data.encode())
+                # Send test data dengan format yang sama
+                now = self.get_ntp_time()
+                test_data = self.process_format_string(self.custom_entry.get(), now)
+                data_bytes = test_data.encode('latin1')
+                s.send(data_bytes)
+                
                 self.log(f"Connection OK! Sent test data: {repr(test_data)}")
+                self.log(f"Hex: {binascii.hexlify(data_bytes).decode('ascii')}")
                 
                 # Try to receive response (optional)
                 try:
@@ -381,7 +362,7 @@ class NPClockSync:
                 s.connect((ip, port))
                 
                 # Convert to bytes
-                data_bytes = time_str.encode('utf-8')
+                data_bytes = time_str.encode('latin1')
                 hex_data = binascii.hexlify(data_bytes).decode('ascii')
                 
                 self.log(f"Syncing time to {ip}:{port}")
@@ -403,7 +384,6 @@ class NPClockSync:
             self.log(f"Sync failed: {e}")
             return False
 
-    
 
 if __name__ == "__main__":
     root = tk.Tk()
