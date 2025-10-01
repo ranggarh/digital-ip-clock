@@ -5,17 +5,30 @@ import threading
 import time
 import pickle
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor
+
+
+
+def resource_path(filename):
+    if getattr(sys, 'frozen', False):
+        # Jika dijalankan dari .exe hasil PyInstaller
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(__file__)
+    return os.path.join(base_path, filename)
 
 IP_LIST_FILE = "ip_list.pkl"
 
 class NP301SyncTool:
     def __init__(self, root):
         self.root = root
-        self.root.title("NP301 TCP/IP Sync Tool")
+        icon_path = resource_path("assets/favicon.ico")
+        if os.path.exists(icon_path):
+            self.root.iconbitmap(icon_path)
+        self.root.title("Digital IP Clock By Puterako")
         self.root.geometry("600x450")
         self.root.configure(bg="black")
-
         # ===== IP List =====
         self.ip_list = self.load_ip_list()
         self.port = 1001
@@ -59,16 +72,28 @@ class NP301SyncTool:
         self.toggle_live()
 
     def load_ip_list(self):
-        if os.path.exists(IP_LIST_FILE):
+        # Cek file di folder kerja (tempat .exe dijalankan)
+        local_file = os.path.join(os.getcwd(), IP_LIST_FILE)
+        if os.path.exists(local_file):
             try:
-                with open(IP_LIST_FILE, "rb") as f:
+                with open(local_file, "rb") as f:
+                    return pickle.load(f)
+            except Exception:
+                return ["192.168.2.246"]
+        # Jika tidak ada, baca dari bundle (resource_path)
+        ip_file_path = resource_path(IP_LIST_FILE)
+        if os.path.exists(ip_file_path):
+            try:
+                with open(ip_file_path, "rb") as f:
                     return pickle.load(f)
             except Exception:
                 return ["192.168.2.246"]
         return ["192.168.2.246"]
 
     def save_ip_list(self):
-        with open(IP_LIST_FILE, "wb") as f:
+        # Selalu simpan ke folder kerja (tempat .exe dijalankan)
+        local_file = os.path.join(os.getcwd(), IP_LIST_FILE)
+        with open(local_file, "wb") as f:
             pickle.dump(self.ip_list, f)
 
     def update_clock(self):
