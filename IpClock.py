@@ -3,8 +3,11 @@ import socket
 import datetime
 import threading
 import time
+import pickle
+import os
 from concurrent.futures import ThreadPoolExecutor
 
+IP_LIST_FILE = "ip_list.pkl"
 
 class NP301SyncTool:
     def __init__(self, root):
@@ -14,7 +17,7 @@ class NP301SyncTool:
         self.root.configure(bg="black")
 
         # ===== IP List =====
-        self.ip_list = ["192.168.2.246"]  # default, bisa diubah
+        self.ip_list = self.load_ip_list()
         self.port = 1001
 
         # ===== Current Time Display =====
@@ -47,7 +50,6 @@ class NP301SyncTool:
         btn_frame = tk.Frame(root, bg="black")
         btn_frame.pack(pady=10)
 
-
         # ===== Log Area =====
         self.log_text = tk.Text(root, height=12, bg="black", fg="white", font=("Courier", 9))
         self.log_text.pack(fill=tk.BOTH, padx=10, pady=10)
@@ -56,6 +58,18 @@ class NP301SyncTool:
         
         self.toggle_live()
 
+    def load_ip_list(self):
+        if os.path.exists(IP_LIST_FILE):
+            try:
+                with open(IP_LIST_FILE, "rb") as f:
+                    return pickle.load(f)
+            except Exception:
+                return ["192.168.2.246"]
+        return ["192.168.2.246"]
+
+    def save_ip_list(self):
+        with open(IP_LIST_FILE, "wb") as f:
+            pickle.dump(self.ip_list, f)
 
     def update_clock(self):
         now = datetime.datetime.now().strftime("%H:%M:%S")
@@ -75,6 +89,7 @@ class NP301SyncTool:
         ip = self.ip_entry.get().strip()
         if ip and ip not in self.ip_list:
             self.ip_list.append(ip)
+            self.save_ip_list()
             self.refresh_ip_listbox()
             self.log(f"IP {ip} ditambahkan.")
         else:
@@ -85,6 +100,7 @@ class NP301SyncTool:
         if selected:
             ip = self.ip_listbox.get(selected[0])
             self.ip_list.remove(ip)
+            self.save_ip_list()
             self.refresh_ip_listbox()
             self.log(f"IP {ip} dihapus.")
         else:
@@ -116,22 +132,17 @@ class NP301SyncTool:
             while self.live_running:
                 msg = self.build_time_string()
                 port = self.get_port()
-
-                # submit semua tanpa blocking
                 for ip in self.ip_list:
                     executor.submit(self.send_time_to_ip, ip, port, msg)
-
                 time.sleep(1)
 
     def toggle_live(self):
         if not self.live_running:
             self.live_running = True
-            # self.live_btn.config(text="Stop Live Sync", bg="gray")
             threading.Thread(target=self.live_worker, daemon=True).start()
             self.log("Live sync dimulai")
         else:
             self.live_running = False
-            # self.live_btn.config(text="Start Live Sync", bg="red")
             self.log("Live sync dihentikan")
 
 if __name__ == "__main__":
