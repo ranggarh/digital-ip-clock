@@ -1,0 +1,62 @@
+📘 Digital IP Clock Sync Tool
+
+Aplikasi Digital IP Clock By Puterako adalah program untuk melakukan sinkronisasi waktu ke perangkat jam digital melalui jaringan TCP/IP.
+Aplikasi ini otomatis menyesuaikan waktu sesuai jam komputer, dan mendukung banyak perangkat (multi-IP).
+
+✨ Fitur Utama
+
+- Sinkronisasi waktu real-time ke jam digital (via TCP/IP).
+- Mendukung banyak perangkat sekaligus.
+- Tambah/Hapus daftar IP dengan mudah.
+- Log aktivitas sync ditampilkan langsung di aplikasi.
+- Auto-startup: aplikasi otomatis berjalan setiap kali komputer dinyalakan.
+
+📦 Instalasi
+
+- Download file .exe dari release.
+- Simpan di folder komputer kamu.
+- Jalankan .exe untuk pertama kali.
+
+🚀 Cara Penggunaan
+
+1. Buka aplikasi Digital IP Clock.
+2. Masukkan IP Device dan Port (default 1001).
+3. Klik Tambah IP → IP akan tersimpan permanen.
+4. Pilih IP di listbox → klik Hapus IP jika tidak dipakai lagi.
+5. Log aktivitas akan tampil di panel bawah.
+
+LANGKAH LANGKAH : INSTALL AUTO-STARTUP
+
+1. Jalankan Batch File:
+
+- Klik kanan install_autostart.bat di Desktop 
+- Pilih "Run as Administrator" ⚠️ PENTING!
+- Klik Yes 
+
+
+2. Akan muncul menu:
+
+   [1] Install Auto-Startup (Registry Method)
+   [2] Install Auto-Startup (Startup Folder Method)
+   [3] Hapus Auto-Startup
+   [4] Cek Status Auto-Startup
+   [5] Exit
+
+3. Ketik angka 1 (Registry Method - Recommended)
+
+- Tekan Enter
+
+
+4. Masukkan path exe:
+
+- Paste path lengkap yang tadi dicopy
+Contoh: C:\Program Files\DigitalClock\DigitalIPClock.exe
+- Tekan Enter
+
+
+5. Jika berhasil, akan muncul:
+
+   ✓ BERHASIL! Auto-startup telah diaktifkan
+     App Name: DigitalIPClock
+     Path: C:\Program Files\DigitalClock\DigitalIPClock.exe
+     Method: Windows Registry
