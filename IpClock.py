@@ -104,9 +104,11 @@ class NP301SyncTool:
         self.root.after(1000, self.update_clock)
 
     def log(self, msg):
+        self.root.after(0, lambda: self._append_log(msg))
+
+    def _append_log(self, msg):
         now = datetime.datetime.now().strftime("%H:%M:%S")
-        log_msg = f"[{now}] : {msg}"
-        self.log_text.insert(tk.END, log_msg + "\n")
+        self.log_text.insert(tk.END, f"[{now}] : {msg}\n")
         self.log_text.see(tk.END)
 
     def refresh_ip_listbox(self):
@@ -149,21 +151,45 @@ class NP301SyncTool:
     def send_time_to_ip(self, ip, port, msg):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(3)
+                s.settimeout(0.3)
                 s.connect((ip, port))
-                s.send(msg.encode("latin1"))
-            self.log(f"Live sync ke {ip} OK")
+                s.sendall(msg.encode("latin1"))
         except Exception:
-            self.log(f"Live sync ke {ip} gagal")
+            pass
 
     def live_worker(self):
-        with ThreadPoolExecutor(max_workers=30) as executor:
+        executor = ThreadPoolExecutor(max_workers=min(50, len(self.ip_list) + 10))
+        
+        # Sinkronisasi awal ke detik genap
+        while datetime.datetime.now().microsecond > 100000:
+            time.sleep(0.01)
+        
+        next_tick = time.time() + 1.0
+        
+        try:
             while self.live_running:
+                # Hitung waktu target berikutnya (setiap detik genap)
+                current = time.time()
+                
+                # Kirim ke semua device secara parallel (fire and forget)
                 msg = self.build_time_string()
                 port = self.get_port()
+                
                 for ip in self.ip_list:
                     executor.submit(self.send_time_to_ip, ip, port, msg)
-                time.sleep(1)
+                
+                # Tunggu hingga tepat 1 detik berikutnya tanpa menunggu hasil
+                next_tick += 1.0
+                sleep_time = next_tick - time.time()
+                
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                else:
+                    # Jika terlambat, reset ke tick berikutnya
+                    next_tick = time.time() + 1.0
+                    
+        finally:
+            executor.shutdown(wait=False)
 
     def toggle_live(self):
         if not self.live_running:
